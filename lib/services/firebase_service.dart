@@ -58,13 +58,36 @@ class FirebaseService {
     return fetchPredictions('predictions/pass');
   }
 
- static Future<List<Map<String, dynamic>>> fetchFailPredictions(
+  static Future<List<Map<String, dynamic>>> fetchFailPredictions(
       String category) async {
     return fetchPredictions('predictions/fail/$category');
   }
 
-  // ── NEW: Fetch recent predictions for home page dashboard ──
- // Replace your existing fetchRecentPredictions with this one!
+  // ── NEW: Fetch ALL fail predictions in ONE request for StatsPage ──
+  static Future<List<Map<String, dynamic>>> fetchAllFailPredictions() async {
+    final snapshot = await _database.ref('predictions/fail').get();
+    if (!snapshot.exists) return [];
+
+    final List<Map<String, dynamic>> records = [];
+    for (final categorySnapshot in snapshot.children) {
+      final categoryName = categorySnapshot.key;
+      for (final child in categorySnapshot.children) {
+        final value = child.value;
+        if (value is Map<Object?, dynamic>) {
+          final map = value.map((key, val) => MapEntry(key.toString(), val));
+          records.add({
+            'id': child.key,
+            'dbPath': 'predictions/fail/$categoryName/${child.key}',
+            'defectType': categoryName,
+            ...map,
+          });
+        }
+      }
+    }
+    return records;
+  }
+
+  // ── Fetch recent predictions for home page dashboard ──
   static Future<List<Map<String, dynamic>>> fetchRecentPredictions({int limit = 3}) async {
     try {
       final List<Map<String, dynamic>> all = [];
@@ -72,7 +95,7 @@ class FirebaseService {
       // 1. Tell Firebase to ONLY send the last few records
       final passSnap = await _database.ref('predictions/pass')
           .orderByChild('timestamp')
-          .limitToLast(limit) // <-- THIS IS THE MAGIC FIX
+          .limitToLast(limit)
           .get();
           
       if (passSnap.exists) {
@@ -90,7 +113,7 @@ class FirebaseService {
       for (final category in categories) {
         final failSnap = await _database.ref('predictions/fail/$category')
             .orderByChild('timestamp')
-            .limitToLast(limit) // <-- MAGIC FIX AGAIN
+            .limitToLast(limit)
             .get();
             
         if (failSnap.exists) {

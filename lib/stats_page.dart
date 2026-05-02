@@ -67,58 +67,66 @@ class _StatsPageState extends State<StatsPage> {
     _loadStats();
   }
 
-  Future<void> _loadStats() async {
+ Future<void> _loadStats() async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
     try {
+      // 1. We ONLY make 2 network calls now instead of 8!
+      // We also give it 45 seconds to be safe on slow web connections.
       final results = await Future.wait([
-        FirebaseService.countPass(),
-        FirebaseService.countFail(),
-        FirebaseService.countFailCategories(),
         FirebaseService.fetchPassPredictions(),
-        FirebaseService.fetchFailPredictions('open_circuit'),
-        FirebaseService.fetchFailPredictions('missing_hole'),
-        FirebaseService.fetchFailPredictions('mouse_bite'),
-        FirebaseService.fetchFailPredictions('other'),
-      ]).timeout(const Duration(seconds: 25));
+        FirebaseService.fetchAllFailPredictions(), 
+      ]).timeout(const Duration(seconds: 45));
 
-      final passCount = results[0] as int;
-      final failCount = results[1] as int;
-      final categoryCounts = results[2] as Map<String, int>;
-      final passPredictions = results[3] as List<Map<String, dynamic>>;
-      final openCircuit = results[4] as List<Map<String, dynamic>>;
-      final missingHole = results[5] as List<Map<String, dynamic>>;
-      final mouseBite = results[6] as List<Map<String, dynamic>>;
-      final other = results[7] as List<Map<String, dynamic>>;
+      final passData = results[0];
+      final failData = results[1];
 
+      // 2. Convert raw data to your PredictionRecord objects
+      final passRecords = passData.map(PredictionRecord.fromMap).toList();
+      final failRecords = failData.map(PredictionRecord.fromMap).toList();
+
+      if (!mounted) return;
+
+      // 3. Do all the counting and sorting instantly on the device!
       setState(() {
-        _passCount = passCount;
-        _failCount = failCount;
-        _categoryCounts = {
-          'open_circuit': categoryCounts['open_circuit'] ?? 0,
-          'missing_hole': categoryCounts['missing_hole'] ?? 0,
-          'mouse_bite': categoryCounts['mouse_bite'] ?? 0,
-          'other': categoryCounts['other'] ?? 0,
-        };
-        _passPredictions = passPredictions.map(PredictionRecord.fromMap).toList();
+        _passCount = passRecords.length;
+        _failCount = failRecords.length;
+        _passPredictions = passRecords;
+
+        // Sort fails into their category lists
         _failPredictions = {
-          'open_circuit': openCircuit.map(PredictionRecord.fromMap).toList(),
-          'missing_hole': missingHole.map(PredictionRecord.fromMap).toList(),
-          'mouse_bite': mouseBite.map(PredictionRecord.fromMap).toList(),
-          'other': other.map(PredictionRecord.fromMap).toList(),
+          'open_circuit': failRecords.where((r) => r.defectType == 'open_circuit').toList(),
+          'missing_hole': failRecords.where((r) => r.defectType == 'missing_hole').toList(),
+          'mouse_bite': failRecords.where((r) => r.defectType == 'mouse_bite').toList(),
+          'other': failRecords.where((r) => 
+              r.defectType != 'open_circuit' && 
+              r.defectType != 'missing_hole' && 
+              r.defectType != 'mouse_bite'
+          ).toList(),
+        };
+
+        // Count the categories based on the lists above
+        _categoryCounts = {
+          'open_circuit': _failPredictions['open_circuit']!.length,
+          'missing_hole': _failPredictions['missing_hole']!.length,
+          'mouse_bite': _failPredictions['mouse_bite']!.length,
+          'other': _failPredictions['other']!.length,
         };
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _error = 'Unable to load stats: $e';
+        _error = 'Wi-Fi connection is too slow. Please try again.\n($e)';
       });
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
