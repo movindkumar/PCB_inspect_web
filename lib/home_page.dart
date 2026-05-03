@@ -371,10 +371,13 @@ class _HomePageState extends State<HomePage> {
                               'View inspection history, defect trends and statistics.',
                           badgeText: 'Analytics',
                           badgeColor: const Color(0xFF3B7DDD),
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                                builder: (_) => const StatsPage()),
-                          ),
+                          // ✅
+onTap: () async {
+  await Navigator.of(context).push(
+    MaterialPageRoute(builder: (_) => const StatsPage()),
+  );
+  _loadDashboardStats();
+},
                         ),
                         const SizedBox(height: 12),
                         _ActionCard(
@@ -386,10 +389,13 @@ class _HomePageState extends State<HomePage> {
                               'View full table of all PCB inspection records.',
                           badgeText: 'Engineer',
                           badgeColor: const Color(0xFF7B5EA7),
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                                builder: (_) => const ResultsPage()),
-                          ),
+                          // ✅ Reload dashboard stats when user comes back
+onTap: () async {
+  await Navigator.of(context).push(
+    MaterialPageRoute(builder: (_) => const ResultsPage()),
+  );
+  _loadDashboardStats(); // refresh home stats too
+},
                         ),
                       ],
 

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io' show File;
 
 import 'package:file_picker/file_picker.dart';
@@ -111,17 +110,20 @@ class _UploadPageState extends State<UploadPage> {
         });
 
         // Save to Firebase
-        await FirebaseService.savePrediction(
-          imageName: _fileName!,
-          result: _resultStatus!,
-          defectType: isPass ? null : result.classification,
-          imageData: base64Encode(_imageBytes!),
-          timestamp: DateTime.now(),
-        );
+        // ✅ upload_page.dart — in _predictImage()
+// ✅ REPLACE WITH THIS
+setState(() => _message = 'Saving to database...');
+final imageUrl = await FirebaseService.uploadImage(_imageBytes!, _fileName!);
 
-        setState(() {
-          _message = '${_message!} Data saved to database.';
-        });
+await FirebaseService.savePrediction(
+  imageName: _fileName!,
+  result: _resultStatus!,
+  defectType: isPass ? null : result.classification,
+  imageUrl: imageUrl,
+  timestamp: DateTime.now(),
+);
+
+setState(() => _message = '${isPass ? '✓ PCB passed!' : '✗ Defect detected!'} Saved.');
 
         await _showResultDialog(isPass, result);
       } else {
@@ -225,10 +227,14 @@ class _UploadPageState extends State<UploadPage> {
                       child: const Text('Upload another image'),
                     ),
                     const SizedBox(height: 10),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Close', style: TextStyle(fontSize: 16)),
-                    ),
+                    // ✅ Pop both the dialog AND the UploadPage so HomePage refreshes
+TextButton(
+  onPressed: () {
+    Navigator.of(context).pop(); // close dialog
+    Navigator.of(context).pop(); // return to home so it can refresh
+  },
+  child: const Text('Close', style: TextStyle(fontSize: 16)),
+),
                   ],
                 ),
               ),

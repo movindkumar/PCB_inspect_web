@@ -25,11 +25,24 @@ class _ResultsPageState extends State<ResultsPage> {
     'Other',
   ];
 
-  @override
-  void initState() {
-    super.initState();
+  // ✅ Also reload when user navigates back to this page
+@override
+void initState() {
+  super.initState();
+  _loadResults();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    ModalRoute.of(context)?.addScopedWillPopCallback(() async => true);
+  });
+}
+
+@override
+void didChangeDependencies() {
+  super.didChangeDependencies();
+  final route = ModalRoute.of(context);
+  if (route != null && route.isCurrent && !_isLoading) {
     _loadResults();
   }
+}
 
   Future<void> _loadResults() async {
     setState(() {
@@ -38,8 +51,27 @@ class _ResultsPageState extends State<ResultsPage> {
     });
 
     try {
-      final all = await FirebaseService.fetchRecentPredictions(limit: 999)
-          .timeout(const Duration(seconds: 25));
+      // ✅ Use the proper full-fetch methods in parallel
+final results = await Future.wait([
+  FirebaseService.fetchPassPredictions(),
+  FirebaseService.fetchAllFailPredictions(),
+]).timeout(const Duration(seconds: 30));
+
+final passList = results[0];
+final failList = results[1];
+
+// Tag pass records with result field (fetchPassPredictions doesn't add it)
+final tagged = [
+  ...passList.map((r) => {...r, 'result': 'pass'}),
+  ...failList,
+];
+
+// Sort newest first
+tagged.sort((a, b) =>
+    (b['timestamp']?.toString() ?? '')
+        .compareTo(a['timestamp']?.toString() ?? ''));
+
+final all = tagged;
       setState(() {
         _allRecords = all;
         _filteredRecords = all;

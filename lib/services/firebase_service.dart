@@ -1,36 +1,65 @@
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'dart:typed_data';
+import 'package:firebase_storage/firebase_storage.dart'; // already there
 
 class FirebaseService {
   static final FirebaseDatabase _database = FirebaseDatabase.instance;
+  static final FirebaseStorage _storage = FirebaseStorage.instance;
+
+  // Upload image to Firebase Storage, returns download URL
+  static Future<String?> uploadImage(Uint8List imageBytes, String fileName) async {
+    try {
+      final ref = _storage.ref().child('pcb_images/$fileName');
+      final uploadTask = await ref.putData(
+        imageBytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      return await uploadTask.ref.getDownloadURL();
+    } catch (e) {
+      return null;
+    }
+  }
 
   static Future<void> savePrediction({
     required String imageName,
-    required String result, // 'pass' or 'fail'
-    String? defectType, // null if pass, else defect type
-    String? imageData,
+    required String result,
+    String? defectType,
+    String? imageUrl,
     required DateTime timestamp,
   }) async {
     final record = {
       'imageName': imageName,
       'result': result,
       'timestamp': timestamp.toIso8601String(),
-      'imageData': imageData,
+      'imageUrl': ?imageUrl,
     };
 
     if (result == 'pass') {
       final ref = _database.ref('predictions/pass').push();
       await ref.set(record);
     } else {
-      final formattedType = defectType?.toLowerCase().replaceAll(' ', '_') ?? 'unknown';
-      final category = ['open_circuit', 'missing_hole', 'mouse_bite'].contains(formattedType)
+      final formattedType = defectType
+          ?.toLowerCase()
+          .replaceAll(' ', '_') ?? 'other';
+
+      const validCategories = ['open_circuit', 'missing_hole', 'mouse_bite'];
+      final category = validCategories.contains(formattedType)
           ? formattedType
           : 'other';
+
       final ref = _database.ref('predictions/fail/$category').push();
       await ref.set({
         ...record,
-        'defectType': defectType,
+        'defectType': formattedType,
       });
     }
+
+    // Update counters
+    final countRef = _database.ref('counts/${result == 'pass' ? 'pass' : 'fail'}');
+    final countSnap = await countRef.get();
+    final current = (countSnap.value as int?) ?? 0;
+    await countRef.set(current + 1);
   }
 
   static Future<List<Map<String, dynamic>>> fetchPredictions(String path) async {
@@ -63,7 +92,6 @@ class FirebaseService {
     return fetchPredictions('predictions/fail/$category');
   }
 
-  // ── NEW: Fetch ALL fail predictions in ONE request for StatsPage ──
   static Future<List<Map<String, dynamic>>> fetchAllFailPredictions() async {
     final snapshot = await _database.ref('predictions/fail').get();
     if (!snapshot.exists) return [];
@@ -87,47 +115,54 @@ class FirebaseService {
     return records;
   }
 
-  // ── Fetch recent predictions for home page dashboard ──
   static Future<List<Map<String, dynamic>>> fetchRecentPredictions({int limit = 3}) async {
     try {
+      final categories = ['open_circuit', 'missing_hole', 'mouse_bite', 'other'];
+
+      final snapshots = await Future.wait([
+        _database.ref('predictions/pass')
+            .orderByChild('timestamp')
+            .limitToLast(limit)
+            .get(),
+        ...categories.map((cat) => _database
+            .ref('predictions/fail/$cat')
+            .orderByChild('timestamp')
+            .limitToLast(limit)
+            .get()),
+      ]);
+
       final List<Map<String, dynamic>> all = [];
 
-      // 1. Tell Firebase to ONLY send the last few records
-      final passSnap = await _database.ref('predictions/pass')
-          .orderByChild('timestamp')
-          .limitToLast(limit)
-          .get();
-          
-      if (passSnap.exists) {
-        for (final child in passSnap.children) {
+      if (snapshots[0].exists) {
+        for (final child in snapshots[0].children) {
           final value = child.value;
           if (value is Map<Object?, dynamic>) {
-            final map = value.map((key, val) => MapEntry(key.toString(), val));
-            all.add({'id': child.key, 'result': 'pass', ...map});
+            all.add({
+              'id': child.key,
+              'result': 'pass',
+              ...value.map((k, v) => MapEntry(k.toString(), v)),
+            });
           }
         }
       }
 
-      // 2. Do the exact same for fails
-      final categories = ['open_circuit', 'missing_hole', 'mouse_bite', 'other'];
-      for (final category in categories) {
-        final failSnap = await _database.ref('predictions/fail/$category')
-            .orderByChild('timestamp')
-            .limitToLast(limit)
-            .get();
-            
-        if (failSnap.exists) {
-          for (final child in failSnap.children) {
+      for (int i = 0; i < categories.length; i++) {
+        final snap = snapshots[i + 1];
+        if (snap.exists) {
+          for (final child in snap.children) {
             final value = child.value;
             if (value is Map<Object?, dynamic>) {
-              final map = value.map((key, val) => MapEntry(key.toString(), val));
-              all.add({'id': child.key, 'result': 'fail', 'defectType': category, ...map});
+              all.add({
+                'id': child.key,
+                'result': 'fail',
+                'defectType': categories[i],
+                ...value.map((k, v) => MapEntry(k.toString(), v)),
+              });
             }
           }
         }
       }
 
-      // Sort and return
       all.sort((a, b) {
         final tA = a['timestamp']?.toString() ?? '';
         final tB = b['timestamp']?.toString() ?? '';
@@ -141,23 +176,13 @@ class FirebaseService {
   }
 
   static Future<int> countPass() async {
-    final snapshot = await _database.ref('predictions/pass').get();
-    if (!snapshot.exists) {
-      return 0;
-    }
-    return snapshot.children.length;
+    final snap = await _database.ref('counts/pass').get();
+    return (snap.value as int?) ?? 0;
   }
 
   static Future<int> countFail() async {
-    final snapshot = await _database.ref('predictions/fail').get();
-    if (!snapshot.exists) {
-      return 0;
-    }
-    int count = 0;
-    for (final child in snapshot.children) {
-      count += child.children.length;
-    }
-    return count;
+    final snap = await _database.ref('counts/fail').get();
+    return (snap.value as int?) ?? 0;
   }
 
   static Future<void> deletePrediction(String dbPath) async {

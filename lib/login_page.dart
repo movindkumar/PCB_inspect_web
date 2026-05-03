@@ -87,7 +87,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       } else {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'Invalid operator ID or password.';
+          _errorMessage = 'Invalid  ID or password.';
         });
       }
     });
@@ -310,11 +310,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         const SizedBox(height: 36),
 
                         // Operator ID Field
-                        _buildLabel('Operator ID'),
+                        _buildLabel(' ID'),
                         const SizedBox(height: 8),
                         _buildTextField(
                           controller: _usernameController,
-                          hintText: 'Enter your operator ID',
+                          hintText: 'Enter your  ID',
                           icon: Icons.badge_outlined,
                         ),
 
