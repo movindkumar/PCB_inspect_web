@@ -32,7 +32,7 @@ class PredictionResult {
 }
 
 class ApiService {
-  static const String baseUrl = 'http://localhost:8000'; // Adjust if needed
+  static const String baseUrl = 'https://pcb-backend-s33y.onrender.com'; // Adjust if needed
 
   static Future<PredictionResult?> predictImageBytes(
     Uint8List imageBytes,

@@ -25,6 +25,7 @@ SAVE_DIR = "saved_pcb_images"
 print("Loading YOLOv8 model...")
 try:
     model = YOLO("best.pt") 
+    model.to('cpu')
     print("Model loaded successfully!")
     # Add this line in main.py after model = YOLO("best.pt")
     print(f"Model classes: {model.names}")
@@ -117,4 +118,6 @@ async def predict_image(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     print("Starting PCB Defect Detection API...")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Read the port assigned by Render, or default to 8000 locally
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
