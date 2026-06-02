@@ -3,6 +3,6 @@ torch
 torchvision
 fastapi==0.110.0
 uvicorn==0.28.0
-ultralytics==8.1.0
+ultralytics
 pillow
 python-multipart==0.0.9
