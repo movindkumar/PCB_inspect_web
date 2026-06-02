@@ -8,18 +8,17 @@ class FirebaseService {
   static final FirebaseStorage _storage = FirebaseStorage.instance;
 
   // Upload image to Firebase Storage, returns download URL
-  static Future<String?> uploadImage(Uint8List imageBytes, String fileName) async {
-    try {
-      final ref = _storage.ref().child('pcb_images/$fileName');
-      final uploadTask = await ref.putData(
-        imageBytes,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-      return await uploadTask.ref.getDownloadURL();
-    } catch (e) {
-      return null;
-    }
+ // ✅ REPLACE WITH THIS
+static Future<String?> uploadImage(Uint8List imageBytes, String fileName) async {
+  try {
+    final ref = _storage.ref().child('pcb_images/$fileName');
+    final uploadTask = await ref.putData(imageBytes)
+        .timeout(const Duration(seconds: 10));
+    return await uploadTask.ref.getDownloadURL();
+  } catch (e) {
+    return null;
   }
+}
 
   static Future<void> savePrediction({
     required String imageName,

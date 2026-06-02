@@ -1,8 +1,11 @@
+// ✅ REPLACE WITH THIS (removed dart:convert, added foundation)
 import 'dart:io' show File;
+import 'package:flutter/foundation.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 
 import 'services/api_service.dart';
 import 'services/firebase_service.dart';
@@ -112,8 +115,13 @@ class _UploadPageState extends State<UploadPage> {
         // Save to Firebase
         // ✅ upload_page.dart — in _predictImage()
 // ✅ REPLACE WITH THIS
+// ✅ REPLACE WITH THIS
 setState(() => _message = 'Saving to database...');
-final imageUrl = await FirebaseService.uploadImage(_imageBytes!, _fileName!);
+
+String? imageUrl;
+if (!kIsWeb) {
+  imageUrl = await FirebaseService.uploadImage(_imageBytes!, _fileName!);
+}
 
 await FirebaseService.savePrediction(
   imageName: _fileName!,
@@ -121,6 +129,9 @@ await FirebaseService.savePrediction(
   defectType: isPass ? null : result.classification,
   imageUrl: imageUrl,
   timestamp: DateTime.now(),
+).timeout(
+  const Duration(seconds: 15),
+  onTimeout: () {},
 );
 
 setState(() => _message = '${isPass ? '✓ PCB passed!' : '✗ Defect detected!'} Saved.');
