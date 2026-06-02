@@ -25632,7 +25632,7 @@ HY(a,b){return A.aHe(a,b)},
 aHe(a1,a2){var s=0,r=A.L(t.Zp),q,p=2,o=[],n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0
 var $async$HY=A.H(function(a3,a4){if(a3===1){o.push(a4)
 s=p}for(;;)switch(s){case 0:p=4
-n=A.lj("http://localhost:8000/predict")
+n=A.lj("https://pcb-backend-s33y.onrender.com/predict")
 h=A.aKy("POST",n)
 g=t.zb
 f=new A.jU(null,null,null,null,g)
