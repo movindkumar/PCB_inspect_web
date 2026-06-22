@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:html' as html;
-import 'dart:ui_web' as ui_web; // <--- 1. CHANGED IMPORT HERE
+import 'dart:ui_web' as ui_web;
+import 'dart:convert'; // Required for the Base64 encoding
 
 class PcbDefect3DViewer extends StatefulWidget {
   const PcbDefect3DViewer({super.key});
@@ -10,21 +11,270 @@ class PcbDefect3DViewer extends StatefulWidget {
 }
 
 class _PcbDefect3DViewerState extends State<PcbDefect3DViewer> {
-  // A unique ID for the iframe registry
   final String viewId = 'threejs-pcb-viewer';
+
+  // 1. We store your entire HTML file as a raw Dart string
+  final String _rawHtml = r'''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PCB Defect 3D Viewer</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#07100a; color:#e0ead8; font-family:'Courier New',monospace; overflow:hidden; height:100vh; display:flex; flex-direction:column; }
+header { padding:10px 18px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #1e3a1e; background:#040a04; flex-shrink:0; gap:8px; }
+.logo { font-size:11px; letter-spacing:0.18em; color:#4caf50; }
+.tabs { display:flex; gap:5px; }
+.tab { padding:5px 14px; border:1px solid #2e4a2e; background:transparent; color:#6a9b6a; font-family:'Courier New',monospace; font-size:9px; letter-spacing:0.1em; cursor:pointer; border-radius:2px; transition:all .2s; }
+.tab.active { background:#1a3a1a; border-color:#4caf50; color:#4caf50; }
+.live { font-size:9px; color:#3a6a3a; letter-spacing:0.1em; }
+.dot { display:inline-block; width:6px; height:6px; background:#4caf50; border-radius:50%; margin-right:5px; animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+#wrap { flex:1; position:relative; }
+canvas { display:block; width:100%; height:100%; cursor:grab; }
+.panel { position:absolute; bottom:16px; left:16px; background:rgba(2,8,2,.93); border:1px solid #1e3a1e; padding:12px 14px; border-radius:2px; max-width:210px; pointer-events:none; }
+.pname { font-size:11px; color:#4caf50; letter-spacing:0.08em; margin-bottom:4px; text-transform:uppercase; }
+.pdesc { font-size:9px; color:#6a9b6a; line-height:1.75; }
+.pbadge { display:inline-block; margin-top:8px; padding:2px 8px; font-size:8px; letter-spacing:0.12em; border:1px solid; border-radius:2px; text-transform:uppercase; }
+.hint { position:absolute; bottom:16px; right:16px; font-size:8px; color:#2e4a2e; text-align:right; line-height:2; pointer-events:none; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">PCB·DEFECT·3D</div>
+  <div class="tabs">
+    <button class="tab active" id="t-mh" onclick="switchDefect('mh')">Missing Hole</button>
+    <button class="tab"        id="t-mb" onclick="switchDefect('mb')">Mouse Bite</button>
+    <button class="tab"        id="t-oc" onclick="switchDefect('oc')">Open Circuit</button>
+  </div>
+  <div class="live"><span class="dot"></span>3D ACTIVE</div>
+</header>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+  <div class="panel">
+    <div class="pname" id="pname">Missing Hole</div>
+    <div class="pdesc" id="pdesc">A drilled hole absent in the PCB substrate. Prevents component lead insertion and electrical connectivity.</div>
+    <div class="pbadge" id="pbadge" style="color:#ef5350;border-color:#ef5350;">CRITICAL DEFECT</div>
+  </div>
+  <div class="hint">DRAG — rotate<br>SCROLL — zoom<br>RIGHT DRAG — pan</div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const INFO = {
+  mh: { name:'Missing Hole',  desc:'A drilled hole absent in the PCB substrate. Prevents component lead insertion and electrical connectivity.', badge:'CRITICAL DEFECT', color:'#ef5350' },
+  mb: { name:'Mouse Bite',    desc:'Semicircular notches bitten into the PCB board edge during depaneling. Named because the edge looks like it was bitten by a mouse. Damages nearby copper traces.', badge:'EDGE DEFECT', color:'#ffa726' },
+  oc: { name:'Open Circuit',  desc:'A break in a copper trace interrupting the electrical path. Current cannot flow, causing partial or full circuit failure.', badge:'ELECTRICAL DEFECT', color:'#42a5f5' }
+};
+const canvas = document.getElementById('cv');
+const wrap   = document.getElementById('wrap');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene  = new THREE.Scene();
+scene.background = new THREE.Color(0x060e06);
+scene.fog = new THREE.FogExp2(0x060e06, 0.038);
+const camera = new THREE.PerspectiveCamera(44, 1, 0.05, 120);
+camera.position.set(0, 8, 14);
+function onResize() {
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  renderer.setSize(W, H);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  camera.aspect = W / H;
+  camera.updateProjectionMatrix();
+}
+onResize();
+window.addEventListener('resize', onResize);
+scene.add(new THREE.AmbientLight(0x1a2e1a, 1.2));
+const sun = new THREE.DirectionalLight(0xfff8e0, 2.0);
+sun.position.set(5, 14, 8);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+scene.add(sun);
+const fillL = new THREE.DirectionalLight(0x80cfa9, 0.6);
+fillL.position.set(-8, 5, -6);
+scene.add(fillL);
+const rimL = new THREE.PointLight(0x00c853, 0.5, 30);
+rimL.position.set(-3, 9, -5);
+scene.add(rimL);
+function stdMat(color, roughness, metalness) { return new THREE.MeshStandardMaterial({ color, roughness, metalness }); }
+function emiMat(color, emissive, emissiveIntensity) { return new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0, emissive, emissiveIntensity }); }
+const MAT = {
+  pcb:  stdMat(0x0d4a14, 0.55, 0.10),
+  mask: new THREE.MeshStandardMaterial({ color:0x0a4210, roughness:0.45, metalness:0.05, transparent:true, opacity:0.88 }),
+  cu:   stdMat(0xb87333, 0.28, 0.92),
+  pad:  stdMat(0xd49040, 0.22, 0.94),
+  hole: stdMat(0x010401, 1.00, 0.00),
+  chip: stdMat(0x111111, 0.60, 0.30),
+  gold: stdMat(0xd4af37, 0.22, 0.96),
+  smt:  stdMat(0x888880, 0.40, 0.70),
+  red:  emiMat(0xff1744, 0x550000, 1.5),
+  amb:  emiMat(0xff8f00, 0x6a3500, 1.2),
+  blu:  emiMat(0x42a5f5, 0x0a3060, 1.5),
+};
+function box(w, h, d, mat, x, y, z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; return m;
+}
+function cyl(rt, rb, h, seg, mat, x, y, z) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat); m.position.set(x, y, z); m.castShadow = true; return m;
+}
+function trace(g, x, z, len, w, dir) {
+  const gw = dir === 'x' ? len : w; const gd = dir === 'x' ? w   : len;
+  g.add(box(gw, 0.055, gd, MAT.cu, x, 0.028, z));
+}
+function smtComp(g, x, z, w, l) {
+  g.add(box(w, 0.08, l, MAT.smt, x, 0.09, z));
+  g.add(box(0.055, 0.08, l * 0.7, MAT.cu, x - w/2, 0.09, z));
+  g.add(box(0.055, 0.08, l * 0.7, MAT.cu, x + w/2, 0.09, z));
+}
+function padHole(g, x, z) {
+  g.add(cyl(0.27, 0.27, 0.07, 24, MAT.pad,  x, 0.035, z));
+  g.add(cyl(0.13, 0.13, 0.42, 24, MAT.hole, x, 0,     z));
+}
+function addFloor(g) {
+  const fl = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), stdMat(0x030803, 1, 0)); fl.rotation.x = -Math.PI / 2; fl.position.y = -0.55; fl.receiveShadow = true; g.add(fl);
+}
+function buildMH() {
+  const g = new THREE.Group(); addFloor(g);
+  g.add(box(10, 0.38, 7, MAT.pcb,  0, -0.19, 0)); g.add(box(10, 0.05, 7, MAT.mask, 0,  0.025, 0));
+  for (let i = -2; i <= 2; i++) trace(g, 0,     i * 1.0, 8.5, 0.10, 'x');
+  for (let i = -3; i <= 3; i++) trace(g, i*1.1, 0,       5.5, 0.08, 'z');
+  g.add(box(2.2, 0.18, 2.2, MAT.chip, 1.8,  0.09, 0.2)); g.add(box(1.8, 0.08, 1.8, MAT.gold, 1.8,  0.22, 0.2));
+  for (let i = -3; i <= 3; i++) {
+    g.add(box(0.5, 0.06, 0.07, MAT.cu, 0.8 + i * 0.11, 0.03,  1.3));
+    g.add(box(0.5, 0.06, 0.07, MAT.cu, 0.8 + i * 0.11, 0.03, -0.9));
+  }
+  smtComp(g, -2.5,  1.8, 0.26, 0.48); smtComp(g, -2.5, -1.8, 0.26, 0.48);
+  smtComp(g, -1.5,  2.5, 0.18, 0.32); smtComp(g, -3.5,  0.6, 0.18, 0.32);
+  const pads = [[-3.8,-2.2],[-3.8,-0.8],[-3.8,0.6],[-3.8,2.0],[-2.6,-2.2],[-2.6,-0.8],[-2.6,0.6],[-2.6,2.0],[-1.4,-2.2],[-1.4,-0.8],[-1.4,0.6],[-1.4,2.0]];
+  pads.forEach(([x, z], i) => {
+    if (i === 5) {
+      g.add(cyl(0.27, 0.27, 0.07, 32, MAT.pad, x, 0.035, z)); g.add(cyl(0.15, 0.15, 0.08, 32, stdMat(0x0a3a0a, 0.9, 0), x, 0.04, z));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.06, 10, 32), MAT.red); ring.rotation.x = Math.PI / 2; ring.position.set(x, 0.11, z); g.add(ring);
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 16), new THREE.MeshStandardMaterial({ color:0xff1744, emissive:0xff1744, emissiveIntensity:2, transparent:true, opacity:0.7 })); glow.position.set(x, 0.55, z); glow.userData.pulse = true; g.add(glow);
+    } else { padHole(g, x, z); }
+  });
+  return g;
+}
+function buildMB() {
+  const g = new THREE.Group(); addFloor(g);
+  const notches = [[-2.6, 0.42], [-1.5, 0.38], [-0.3, 0.44], [0.9, 0.40], [2.1, 0.43], [3.0, 0.36]];
+  const x0 = -5, x1 = 5, z0 = -3.5, z1 = 3.5;
+  const shape = new THREE.Shape(); shape.moveTo(x1, z0); shape.lineTo(x1, z1); shape.lineTo(x0, z1);
+  const sorted = [...notches].sort((a, b) => b[0] - a[0]); let curZ = z1;
+  sorted.forEach(([nz, r]) => { const top = nz + r, bot = nz - r; if (top < curZ) shape.lineTo(x0, top); shape.absarc(x0, nz, r, Math.PI / 2, -Math.PI / 2, true); curZ = bot; });
+  if (curZ > z0) shape.lineTo(x0, z0); shape.lineTo(x1, z0);
+  const board = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.38, bevelEnabled: false }), MAT.pcb); board.rotation.x = -Math.PI / 2; board.position.y = -0.38; board.castShadow = true; board.receiveShadow = true; g.add(board);
+  const maskMesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), MAT.mask); maskMesh.rotation.x = -Math.PI / 2; maskMesh.position.y = 0.022; g.add(maskMesh);
+  for (let i = -2; i <= 2; i++) trace(g, 0,      i * 1.0, 8.0, 0.11, 'x');
+  for (let i = -2; i <= 2; i++) trace(g, i * 1.3, 0,      5.5, 0.09, 'z');
+  g.add(box(2.0, 0.18, 2.0, MAT.chip, 2.5, 0.09, -0.5)); g.add(box(1.6, 0.08, 1.6, MAT.gold, 2.5, 0.22, -0.5));
+  smtComp(g,  1.0,  2.2, 0.26, 0.48); smtComp(g,  3.0, -1.2, 0.26, 0.48); smtComp(g, -0.5, -2.2, 0.18, 0.32); smtComp(g,  2.5,  0.8, 0.18, 0.32);
+  [[2, -2.2], [3.5, 2.2], [-1, 2.6], [4, -1.5]].forEach(([x, z]) => padHole(g, x, z));
+  sorted.forEach(([nz, r]) => {
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(r + 0.06, 0.08, 8, 20, Math.PI), MAT.amb); arc.rotation.y = Math.PI / 2; arc.position.set(x0 + 0.02, 0.06, nz); arc.userData.pulse = true; g.add(arc);
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 10), new THREE.MeshStandardMaterial({ color:0xffd54f, emissive:0xff8f00, emissiveIntensity:2.5 })); dot.position.set(x0 + r + 0.1, 0.2, nz); dot.userData.pulse = true; g.add(dot);
+  });
+  return g;
+}
+function buildOC() {
+  const g = new THREE.Group(); addFloor(g);
+  g.add(box(10, 0.38, 7, MAT.pcb,  0, -0.19, 0)); g.add(box(10, 0.05, 7, MAT.mask, 0,  0.025, 0));
+  for (let i = -2; i <= 2; i++) trace(g, 0,      i * 1.0, 8.5, 0.10, 'x');
+  for (let i = -3; i <= 3; i++) trace(g, i * 1.1, 0,      5.5, 0.08, 'z');
+  [-2, 0, 2].forEach(z => {
+    g.add(box(3.2, 0.06, 0.13, MAT.cu, -3.4, 0.03, z)); g.add(box(3.2, 0.06, 0.13, MAT.cu,  3.4, 0.03, z));
+    g.add(box(1.1, 0.07, 0.16, stdMat(0x050d05, 1, 0), 0, 0.035, z));
+    const gw = box(0.95, 0.11, 0.19, MAT.blu, 0, 0.055, z); gw.userData.pulse = true; g.add(gw);
+    [-0.55, 0.55].forEach(ox => {
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 10), new THREE.MeshStandardMaterial({ color:0x90caf9, emissive:0x42a5f5, emissiveIntensity:2.8 })); dot.position.set(ox, 0.19, z); dot.userData.pulse = true; g.add(dot);
+    });
+  });
+  [-2, 0, 2].forEach(z => { padHole(g, -4.6, z); padHole(g, 4.6, z); });
+  trace(g, -4.6, 0, 4.2, 0.09, 'z'); trace(g,  4.6, 0, 4.2, 0.09, 'z');
+  smtComp(g, -1.5,  2.5, 0.24, 0.44); smtComp(g,  2.0, -2.5, 0.24, 0.44);
+  g.add(box(1.6, 0.15, 1.2, MAT.chip, -2.5, 0.075, -2.2)); g.add(box(1.2, 0.06, 0.8, MAT.gold, -2.5, 0.18,  -2.2));
+  return g;
+}
+let activeGroup = null;
+function clearScene() { if (!activeGroup) return; scene.remove(activeGroup); activeGroup.traverse(o => { if (o.geometry) o.geometry.dispose(); }); activeGroup = null; }
+function loadDefect(type) {
+  clearScene();
+  if      (type === 'mh') activeGroup = buildMH();
+  else if (type === 'mb') activeGroup = buildMB();
+  else                    activeGroup = buildOC();
+  scene.add(activeGroup);
+  camRotX = 0.45; camRotY = 0.35; camPanX = 0; camPanZ = 0; camZoom = 13;
+}
+function switchDefect(type) {
+  ['mh','mb','oc'].forEach(k => { document.getElementById('t-' + k).classList.remove('active'); });
+  document.getElementById('t-' + type).classList.add('active');
+  const info = INFO[type];
+  document.getElementById('pname').textContent  = info.name;
+  document.getElementById('pdesc').textContent  = info.desc;
+  const badge = document.getElementById('pbadge');
+  badge.textContent        = info.badge; badge.style.color        = info.color; badge.style.borderColor  = info.color;
+  loadDefect(type);
+}
+let camRotX = 0.45, camRotY = 0.35, camPanX = 0, camPanZ = 0, camZoom = 13, isDragging = false, isRightBtn = false, lastMouseX = 0, lastMouseY = 0;
+loadDefect('mh');
+canvas.addEventListener('mousedown', e => { isDragging = true; isRightBtn = e.button === 2; lastMouseX = e.clientX; lastMouseY = e.clientY; canvas.style.cursor = 'grabbing'; });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('mouseup', () => { isDragging = false; canvas.style.cursor = 'grab'; });
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const dx = e.clientX - lastMouseX, dy = e.clientY - lastMouseY;
+  if (isRightBtn) { camPanX -= dx * 0.013; camPanZ -= dy * 0.013; }
+  else { camRotY += dx * 0.009; camRotX += dy * 0.007; camRotX = Math.max(-1.1, Math.min(1.1, camRotX)); }
+  lastMouseX = e.clientX; lastMouseY = e.clientY;
+});
+canvas.addEventListener('wheel', e => { camZoom += e.deltaY * 0.025; camZoom = Math.max(5, Math.min(26, camZoom)); }, { passive: true });
+let lastTouchDist = 0;
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) { isDragging = true; isRightBtn = false; lastMouseX = e.touches[0].clientX; lastMouseY = e.touches[0].clientY; }
+  else if (e.touches.length === 2) { lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); }
+});
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && isDragging) {
+    const dx = e.touches[0].clientX - lastMouseX, dy = e.touches[0].clientY - lastMouseY;
+    camRotY += dx * 0.009; camRotX += dy * 0.007; camRotX = Math.max(-1.1, Math.min(1.1, camRotX));
+    lastMouseX = e.touches[0].clientX; lastMouseY = e.touches[0].clientY;
+  } else if (e.touches.length === 2) {
+    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    camZoom -= (dist - lastTouchDist) * 0.05; camZoom = Math.max(5, Math.min(26, camZoom)); lastTouchDist = dist;
+  }
+}, { passive: false });
+canvas.addEventListener('touchend', () => { isDragging = false; });
+let t = 0;
+function animate() {
+  requestAnimationFrame(animate); t += 0.016; if (!isDragging) camRotY += 0.004;
+  if (activeGroup) { activeGroup.traverse(o => { if (o.isMesh && o.userData.pulse && o.material.emissiveIntensity !== undefined) { o.material.emissiveIntensity = 1.0 + Math.sin(t * 3) * 0.8; } }); }
+  camera.position.set(Math.sin(camRotY) * Math.cos(camRotX) * camZoom + camPanX, Math.sin(camRotX) * camZoom + 1, Math.cos(camRotY) * Math.cos(camRotX) * camZoom + camPanZ);
+  camera.lookAt(camPanX, 0, camPanZ); renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
+  ''';
 
   @override
   void initState() {
     super.initState();
     
-    // <--- 2. CHANGED 'ui' to 'ui_web' HERE
+    // 2. We convert the string into a secure Base64 data URL
+    final String base64Content = base64Encode(utf8.encode(_rawHtml));
+    final String dataUrl = 'data:text/html;base64,$base64Content';
+
+    // 3. We feed that URL directly into the IFrame
     ui_web.platformViewRegistry.registerViewFactory(
       viewId,
       (int id) => html.IFrameElement()
         ..width = '100%'
         ..height = '100%'
-        // Accesses the HTML file you stored in your assets folder
-        ..src = 'web/pcb_viewer.html' 
+        ..src = dataUrl // <--- Flawless deployment! No file needed.
         ..style.border = 'none'
         ..style.borderRadius = '12px',
     );
@@ -48,7 +298,6 @@ class _PcbDefect3DViewerState extends State<PcbDefect3DViewer> {
           ),
         ],
       ),
-      // Uses Flutter Web's native HTML renderer
       child: HtmlElementView(viewType: viewId),
     );
   }
