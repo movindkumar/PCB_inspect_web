@@ -24,7 +24,7 @@ class _PcbDefect3DViewerState extends State<PcbDefect3DViewer> {
         ..width = '100%'
         ..height = '100%'
         // Accesses the HTML file you stored in your assets folder
-        ..src = 'pcb_viewer.html' 
+        ..src = 'web/pcb_viewer.html' 
         ..style.border = 'none'
         ..style.borderRadius = '12px',
     );
