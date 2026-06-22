@@ -9,6 +9,7 @@ class PredictionResult {
   final String recommendation;
   final Map<String, double> classScores;
   final String filename;
+  final String imageUrl; // New field for holding cloud URL references
 
   PredictionResult({
     required this.classification,
@@ -17,6 +18,7 @@ class PredictionResult {
     required this.recommendation,
     required this.classScores,
     required this.filename,
+    required this.imageUrl, // Initialized via constructor
   });
 
   factory PredictionResult.fromJson(Map<String, dynamic> json) {
@@ -27,12 +29,13 @@ class PredictionResult {
       recommendation: json['recommendation'] ?? 'No recommendation',
       classScores: Map<String, double>.from(json['class_scores'] ?? {}),
       filename: json['filename'] ?? 'Unknown',
+      imageUrl: json['image_url'] ?? '', // Fallback safely to empty string if absent
     );
   }
 }
 
 class ApiService {
-  static const String baseUrl = 'https://pcb-backend-s33y.onrender.com'; // Adjust if needed
+  static const String baseUrl = 'http://localhost:8000'; // Adjust for your deployment scheme (IP/Render)
 
   static Future<PredictionResult?> predictImageBytes(
     Uint8List imageBytes,
