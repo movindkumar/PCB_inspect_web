@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
-import 'dart:convert'; // Required for the Base64 encoding
+import 'dart:convert';
 
 class PcbDefect3DViewer extends StatefulWidget {
   const PcbDefect3DViewer({super.key});
@@ -13,7 +13,7 @@ class PcbDefect3DViewer extends StatefulWidget {
 class _PcbDefect3DViewerState extends State<PcbDefect3DViewer> {
   final String viewId = 'threejs-pcb-viewer';
 
-  // 1. We store your entire HTML file as a raw Dart string
+  // The HTML string with UPDATED CSS for larger, clearer text and buttons
   final String _rawHtml = r'''
 <!DOCTYPE html>
 <html lang="en">
@@ -24,21 +24,22 @@ class _PcbDefect3DViewerState extends State<PcbDefect3DViewer> {
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { background:#07100a; color:#e0ead8; font-family:'Courier New',monospace; overflow:hidden; height:100vh; display:flex; flex-direction:column; }
-header { padding:10px 18px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #1e3a1e; background:#040a04; flex-shrink:0; gap:8px; }
-.logo { font-size:11px; letter-spacing:0.18em; color:#4caf50; }
-.tabs { display:flex; gap:5px; }
-.tab { padding:5px 14px; border:1px solid #2e4a2e; background:transparent; color:#6a9b6a; font-family:'Courier New',monospace; font-size:9px; letter-spacing:0.1em; cursor:pointer; border-radius:2px; transition:all .2s; }
-.tab.active { background:#1a3a1a; border-color:#4caf50; color:#4caf50; }
-.live { font-size:9px; color:#3a6a3a; letter-spacing:0.1em; }
-.dot { display:inline-block; width:6px; height:6px; background:#4caf50; border-radius:50%; margin-right:5px; animation:pulse 2s infinite; }
+header { padding:14px 24px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #1e3a1e; background:#040a04; flex-shrink:0; gap:8px; }
+.logo { font-size:16px; letter-spacing:0.18em; color:#4caf50; font-weight:bold; }
+.tabs { display:flex; gap:10px; }
+.tab { padding:8px 20px; border:1px solid #2e4a2e; background:transparent; color:#6a9b6a; font-family:'Courier New',monospace; font-size:13px; letter-spacing:0.1em; cursor:pointer; border-radius:4px; transition:all .2s; }
+.tab:hover { border-color:#4caf50; color:#a5d6a7; }
+.tab.active { background:#1a3a1a; border-color:#4caf50; color:#4caf50; font-weight:bold; }
+.live { font-size:12px; color:#3a6a3a; letter-spacing:0.1em; font-weight:bold; }
+.dot { display:inline-block; width:8px; height:8px; background:#4caf50; border-radius:50%; margin-right:6px; animation:pulse 2s infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 #wrap { flex:1; position:relative; }
 canvas { display:block; width:100%; height:100%; cursor:grab; }
-.panel { position:absolute; bottom:16px; left:16px; background:rgba(2,8,2,.93); border:1px solid #1e3a1e; padding:12px 14px; border-radius:2px; max-width:210px; pointer-events:none; }
-.pname { font-size:11px; color:#4caf50; letter-spacing:0.08em; margin-bottom:4px; text-transform:uppercase; }
-.pdesc { font-size:9px; color:#6a9b6a; line-height:1.75; }
-.pbadge { display:inline-block; margin-top:8px; padding:2px 8px; font-size:8px; letter-spacing:0.12em; border:1px solid; border-radius:2px; text-transform:uppercase; }
-.hint { position:absolute; bottom:16px; right:16px; font-size:8px; color:#2e4a2e; text-align:right; line-height:2; pointer-events:none; }
+.panel { position:absolute; bottom:24px; left:24px; background:rgba(2,8,2,.93); border:1px solid #1e3a1e; padding:18px 22px; border-radius:4px; max-width:280px; pointer-events:none; }
+.pname { font-size:16px; color:#4caf50; letter-spacing:0.08em; margin-bottom:8px; text-transform:uppercase; font-weight:bold; }
+.pdesc { font-size:13px; color:#6a9b6a; line-height:1.6; }
+.pbadge { display:inline-block; margin-top:12px; padding:4px 10px; font-size:11px; letter-spacing:0.12em; border:1px solid; border-radius:3px; text-transform:uppercase; font-weight:bold; }
+.hint { position:absolute; bottom:24px; right:24px; font-size:11px; color:#2e4a2e; text-align:right; line-height:2; pointer-events:none; font-weight:bold; }
 </style>
 </head>
 <body>
@@ -264,36 +265,36 @@ animate();
   void initState() {
     super.initState();
     
-    // 2. We convert the string into a secure Base64 data URL
+    // We convert the string into a secure Base64 data URL
     final String base64Content = base64Encode(utf8.encode(_rawHtml));
     final String dataUrl = 'data:text/html;base64,$base64Content';
 
-    // 3. We feed that URL directly into the IFrame
+    // ignore: undefined_prefixed_name
     ui_web.platformViewRegistry.registerViewFactory(
       viewId,
       (int id) => html.IFrameElement()
         ..width = '100%'
         ..height = '100%'
-        ..src = dataUrl // <--- Flawless deployment! No file needed.
+        ..src = dataUrl
         ..style.border = 'none'
-        ..style.borderRadius = '12px',
+        ..style.borderRadius = '16px',
     );
   }
 
- @override
+  @override
   Widget build(BuildContext context) {
-    return Center( // Centers the viewer on large screens
+    return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(
-          maxWidth: 1100, // Stops it from stretching too wide on PC monitors
+          maxWidth: 1100,
         ),
         child: Container(
-          height: 650, // Increased from 480 so the whole PCB fits beautifully
+          height: 650, 
           margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
           clipBehavior: Clip.hardEdge,
           decoration: BoxDecoration(
             color: const Color(0xFF0a0f0a),
-            borderRadius: BorderRadius.circular(16.0), // Slightly rounder corners
+            borderRadius: BorderRadius.circular(16.0),
             border: Border.all(color: Colors.grey.shade300, width: 1.5),
             boxShadow: [
               BoxShadow(
