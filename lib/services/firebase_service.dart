@@ -184,7 +184,31 @@ static Future<String?> uploadImage(Uint8List imageBytes, String fileName) async 
   }
 
   static Future<void> deletePrediction(String dbPath) async {
+    // 1. Fetch the record first so we know if it was a 'pass' or 'fail'
+    final snapshot = await _database.ref(dbPath).get();
+    if (!snapshot.exists) return;
+
+    final data = snapshot.value as Map<Object?, dynamic>?;
+    
+    // Check if the record explicitly says 'pass', otherwise assume it's a 'fail'
+    // (Since 'pass' records have result: 'pass', and fail records usually sit in the fail folder)
+    bool isPass = data != null && data['result']?.toString().toLowerCase() == 'pass';
+    if (dbPath.contains('/pass/')) isPass = true; 
+
+    // 2. Delete the actual image record from the database
     await _database.ref(dbPath).remove();
+
+    // 3. Decrement the specific counter
+    final countPath = isPass ? 'counts/pass' : 'counts/fail';
+    final countRef = _database.ref(countPath);
+    final countSnap = await countRef.get();
+    
+    final int currentCount = (countSnap.value as int?) ?? 0;
+
+    // Prevent the counter from ever going below zero
+    if (currentCount > 0) {
+      await countRef.set(currentCount - 1);
+    }
   }
 
   static Future<String> updatePrediction({

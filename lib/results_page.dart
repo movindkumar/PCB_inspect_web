@@ -25,23 +25,24 @@ class _ResultsPageState extends State<ResultsPage> {
     'Other',
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadResults();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ModalRoute.of(context)?.addScopedWillPopCallback(() async => true);
-    });
-  }
+  // ✅ Also reload when user navigates back to this page
+@override
+void initState() {
+  super.initState();
+  _loadResults();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    ModalRoute.of(context)?.addScopedWillPopCallback(() async => true);
+  });
+}
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final route = ModalRoute.of(context);
-    if (route != null && route.isCurrent && !_isLoading) {
-      _loadResults();
-    }
+@override
+void didChangeDependencies() {
+  super.didChangeDependencies();
+  final route = ModalRoute.of(context);
+  if (route != null && route.isCurrent && !_isLoading) {
+    _loadResults();
   }
+}
 
   Future<void> _loadResults() async {
     setState(() {
@@ -50,24 +51,27 @@ class _ResultsPageState extends State<ResultsPage> {
     });
 
     try {
-      final results = await Future.wait([
-        FirebaseService.fetchPassPredictions(),
-        FirebaseService.fetchAllFailPredictions(),
-      ]).timeout(const Duration(seconds: 30));
+      // ✅ Use the proper full-fetch methods in parallel
+final results = await Future.wait([
+  FirebaseService.fetchPassPredictions(),
+  FirebaseService.fetchAllFailPredictions(),
+]).timeout(const Duration(seconds: 30));
 
-      final passList = results[0];
-      final failList = results[1];
+final passList = results[0];
+final failList = results[1];
 
-      final tagged = [
-        ...passList.map((r) => {...r, 'result': 'pass'}),
-        ...failList,
-      ];
+// Tag pass records with result field (fetchPassPredictions doesn't add it)
+final tagged = [
+  ...passList.map((r) => {...r, 'result': 'pass'}),
+  ...failList,
+];
 
-      tagged.sort((a, b) =>
-          (b['timestamp']?.toString() ?? '')
-              .compareTo(a['timestamp']?.toString() ?? ''));
+// Sort newest first
+tagged.sort((a, b) =>
+    (b['timestamp']?.toString() ?? '')
+        .compareTo(a['timestamp']?.toString() ?? ''));
 
-      final all = tagged;
+final all = tagged;
       setState(() {
         _allRecords = all;
         _filteredRecords = all;
@@ -118,132 +122,6 @@ class _ResultsPageState extends State<ResultsPage> {
     }
   }
 
-  // Pop-up details view showing the remote Cloud Storage URL
-  void _showRecordDetails(Map<String, dynamic> record) {
-    final isPass = record['result']?.toString().toLowerCase() == 'pass';
-    final defectType = isPass
-        ? 'NONE'
-        : (record['defectType']?.toString().replaceAll('_', ' ').toUpperCase() ?? 'UNKNOWN');
-    final riskLevel = record['riskLevel']?.toString() ?? (isPass ? 'Low' : 'Unknown');
-    final recommendation = record['recommendation']?.toString() ?? 'No recommendation available.';
-    
-    // Extract the Cloud Storage URL from your Realtime DB record
-    final imageUrl = record['image_url']?.toString() ?? ''; 
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Container(
-            padding: const EdgeInsets.all(24.0),
-            constraints: const BoxConstraints(maxWidth: 500),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        record['imageName']?.toString() ?? 'Prediction Details',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-                const Divider(),
-                const SizedBox(height: 10),
-                
-                Text(
-                  'Defect Type: $defectType',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                Text(
-                  'Risk Level: $riskLevel',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    color: riskLevel == 'High' ? Colors.red : (isPass ? Colors.green : Colors.orange),
-                  ),
-                ),
-                Text('Recommendation: $recommendation'),
-                
-                const SizedBox(height: 20),
-                
-                // Cloud Storage Network Image logic
-                if (imageUrl.isNotEmpty)
-                  Container(
-                    width: double.infinity,
-                    constraints: const BoxConstraints(maxHeight: 400),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(8.0),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(7.0),
-                      child: Image.network(
-                        imageUrl,
-                        fit: BoxFit.contain,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Padding(
-                            padding: const EdgeInsets.all(20.0),
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                value: loadingProgress.expectedTotalBytes != null
-                                    ? loadingProgress.cumulativeBytesLoaded /
-                                        loadingProgress.expectedTotalBytes!
-                                    : null,
-                              ),
-                            ),
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Padding(
-                            padding: EdgeInsets.all(20.0),
-                            child: Center(
-                              child: Text(
-                                'Failed to load remote evaluation image asset.',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  )
-                else
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(40.0),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(8.0),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: const Column(
-                      children: [
-                        Icon(Icons.image_not_supported_outlined, color: Colors.grey, size: 48),
-                        SizedBox(height: 10),
-                        Text('No image asset stored in cloud database.', 
-                          style: TextStyle(color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -274,7 +152,8 @@ class _ResultsPageState extends State<ResultsPage> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF00C2A8)),
+            icon: const Icon(Icons.refresh_rounded,
+                color: Color(0xFF00C2A8)),
             onPressed: _loadResults,
             tooltip: 'Refresh',
           ),
@@ -312,6 +191,7 @@ class _ResultsPageState extends State<ResultsPage> {
                 )
               : Column(
                   children: [
+                    // ── Summary Bar ───────────────────────────
                     Container(
                       color: const Color(0xFF0D1B2A),
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -339,6 +219,8 @@ class _ResultsPageState extends State<ResultsPage> {
                         ],
                       ),
                     ),
+
+                    // ── Filter Chips ──────────────────────────
                     Container(
                       color: Colors.white,
                       padding: const EdgeInsets.symmetric(
@@ -385,6 +267,8 @@ class _ResultsPageState extends State<ResultsPage> {
                         ),
                       ),
                     ),
+
+                    // ── Table ─────────────────────────────────
                     Expanded(
                       child: _filteredRecords.isEmpty
                           ? Center(
@@ -406,6 +290,7 @@ class _ResultsPageState extends State<ResultsPage> {
                             )
                           : Column(
                               children: [
+                                // Table header
                                 Container(
                                   color: const Color(0xFFE8EDF5),
                                   padding: const EdgeInsets.symmetric(
@@ -414,37 +299,50 @@ class _ResultsPageState extends State<ResultsPage> {
                                     children: [
                                       SizedBox(
                                         width: 36,
-                                        child: Text('#', style: _headerStyle),
+                                        child: Text(
+                                          '#',
+                                          style: _headerStyle,
+                                        ),
                                       ),
                                       Expanded(
                                         flex: 3,
-                                        child: Text('IMAGE FILE',
-                                            style: _headerStyle),
+                                        child: Text(
+                                          'IMAGE FILE',
+                                          style: _headerStyle,
+                                        ),
                                       ),
                                       Expanded(
                                         flex: 2,
-                                        child: Text('RESULT',
-                                            style: _headerStyle,
-                                            textAlign: TextAlign.center),
+                                        child: Text(
+                                          'RESULT',
+                                          style: _headerStyle,
+                                          textAlign: TextAlign.center,
+                                        ),
                                       ),
                                       Expanded(
                                         flex: 3,
-                                        child: Text('DEFECT TYPE',
-                                            style: _headerStyle),
+                                        child: Text(
+                                          'DEFECT TYPE',
+                                          style: _headerStyle,
+                                        ),
                                       ),
                                       Expanded(
                                         flex: 3,
-                                        child: Text('TIMESTAMP',
-                                            style: _headerStyle),
+                                        child: Text(
+                                          'TIMESTAMP',
+                                          style: _headerStyle,
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
+                                // Table rows
                                 Expanded(
                                   child: ListView.builder(
                                     itemCount: _filteredRecords.length,
                                     itemBuilder: (context, index) {
-                                      final record = _filteredRecords[index];
+                                      final record =
+                                          _filteredRecords[index];
                                       final isPass = record['result']
                                               ?.toString()
                                               .toLowerCase() ==
@@ -452,112 +350,130 @@ class _ResultsPageState extends State<ResultsPage> {
                                       final defectType = isPass
                                           ? '—'
                                           : (record['defectType']
-                                                  ?.toString()
-                                                  .replaceAll('_', ' ')
-                                                  .toUpperCase() ??
-                                              '—');
+                                                      ?.toString()
+                                                      .replaceAll('_', ' ')
+                                                      .toUpperCase() ??
+                                                  '—');
                                       final isEven = index % 2 == 0;
 
-                                      return Material(
+                                      return Container(
                                         color: isEven
                                             ? Colors.white
                                             : const Color(0xFFF7F9FC),
-                                        child: InkWell(
-                                          onTap: () => _showRecordDetails(record),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 16, vertical: 12),
-                                            child: Row(
-                                              children: [
-                                                SizedBox(
-                                                  width: 36,
-                                                  child: Text(
-                                                    '${index + 1}',
-                                                    style: const TextStyle(
-                                                      color: Color(0xFFB0BEC5),
-                                                      fontSize: 12,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                  ),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16, vertical: 12),
+                                        child: Row(
+                                          children: [
+                                            // Row number
+                                            SizedBox(
+                                              width: 36,
+                                              child: Text(
+                                                '${index + 1}',
+                                                style: const TextStyle(
+                                                  color: Color(0xFFB0BEC5),
+                                                  fontSize: 12,
+                                                  fontWeight:
+                                                      FontWeight.w600,
                                                 ),
-                                                Expanded(
-                                                  flex: 3,
-                                                  child: Row(
-                                                    children: [
-                                                      const Icon(
-                                                        Icons.image_outlined,
-                                                        size: 14,
-                                                        color: Color(0xFF8A9BB0),
-                                                      ),
-                                                      const SizedBox(width: 6),
-                                                      Expanded(
-                                                        child: Text(
-                                                          record['imageName']
-                                                                  ?.toString() ??
-                                                              '—',
-                                                          style: const TextStyle(
-                                                            fontSize: 12,
-                                                            color: Color(0xFF0D1B2A),
-                                                            fontWeight: FontWeight.w500,
-                                                          ),
-                                                          overflow: TextOverflow.ellipsis,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  flex: 2,
-                                                  child: Center(
-                                                    child: Container(
-                                                      padding: const EdgeInsets.symmetric(
-                                                          horizontal: 10, vertical: 4),
-                                                      decoration: BoxDecoration(
-                                                        color: isPass
-                                                            ? const Color(0xFFE6F7F1)
-                                                            : const Color(0xFFFBEAEA),
-                                                        borderRadius: BorderRadius.circular(6),
-                                                      ),
-                                                      child: Text(
-                                                        isPass ? 'PASS' : 'FAIL',
-                                                        style: TextStyle(
-                                                          color: isPass
-                                                              ? const Color(0xFF1E9E6B)
-                                                              : const Color(0xFFD94040),
-                                                          fontSize: 11,
-                                                          fontWeight: FontWeight.w700,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  flex: 3,
-                                                  child: Text(
-                                                    defectType,
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color: isPass
-                                                          ? const Color(0xFFB0BEC5)
-                                                          : const Color(0xFFD94040),
-                                                      fontWeight: FontWeight.w500,
-                                                    ),
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  flex: 3,
-                                                  child: Text(
-                                                    _formatTimestamp(record['timestamp']?.toString()),
-                                                    style: const TextStyle(
-                                                      fontSize: 11,
-                                                      color: Color(0xFF8A9BB0),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
+                                              ),
                                             ),
-                                          ),
+                                            // Image name
+                                            Expanded(
+                                              flex: 3,
+                                              child: Row(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.image_outlined,
+                                                    size: 14,
+                                                    color: Color(0xFF8A9BB0),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: Text(
+                                                      record['imageName']
+                                                              ?.toString() ??
+                                                          '—',
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                        color:
+                                                            Color(0xFF0D1B2A),
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                      overflow: TextOverflow
+                                                          .ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            // Result badge
+                                            Expanded(
+                                              flex: 2,
+                                              child: Center(
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                          horizontal: 10,
+                                                          vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: isPass
+                                                        ? const Color(
+                                                            0xFFE6F7F1)
+                                                        : const Color(
+                                                            0xFFFBEAEA),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            6),
+                                                  ),
+                                                  child: Text(
+                                                    isPass ? 'PASS' : 'FAIL',
+                                                    style: TextStyle(
+                                                      color: isPass
+                                                          ? const Color(
+                                                              0xFF1E9E6B)
+                                                          : const Color(
+                                                              0xFFD94040),
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            // Defect type
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(
+                                                defectType,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: isPass
+                                                      ? const Color(
+                                                          0xFFB0BEC5)
+                                                      : const Color(
+                                                          0xFFD94040),
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                                overflow:
+                                                    TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            // Timestamp
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(
+                                                _formatTimestamp(record[
+                                                        'timestamp']
+                                                    ?.toString()),
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: Color(0xFF8A9BB0),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       );
                                     },
@@ -586,7 +502,8 @@ class _SummaryPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
         color: color.withOpacity(0.15),
         borderRadius: BorderRadius.circular(8),

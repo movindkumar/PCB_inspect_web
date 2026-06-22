@@ -5,6 +5,7 @@ import 'stats_page.dart';
 import 'upload_page.dart';
 import 'results_page.dart';
 import 'services/firebase_service.dart';
+import 'pcb_3d_viewer.dart';
 
 class HomePage extends StatefulWidget {
   final String username;
@@ -403,66 +404,18 @@ onTap: () async {
 
                       const SizedBox(height: 24),
 
-                      // ── Recent Activity — Engineers only ─────
-                      if (isEngineer) ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const _SectionLabel(text: 'RECENT ACTIVITY'),
-                            GestureDetector(
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                    builder: (_) => const StatsPage()),
-                              ),
-                              child: const Text(
-                                'View all →',
-                                style: TextStyle(
-                                  color: Color(0xFF3B7DDD),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        _statsLoading
-                            ? const SizedBox()
-                            : _recentActivity.isEmpty
-                                ? Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Column(
-                                      children: [
-                                        Icon(Icons.inbox_outlined,
-                                            color: Color(0xFFB0BEC5), size: 36),
-                                        SizedBox(height: 8),
-                                        Text(
-                                          'No inspections yet.\nUpload your first PCB image to begin.',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            color: Color(0xFFB0BEC5),
-                                            fontSize: 13,
-                                            height: 1.5,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                : Column(
-                                    children: _recentActivity
-                                        .map((r) => _RecentActivityTile(
-                                              record: r,
-                                            ))
-                                        .toList(),
-                                  ),
-                      ],
+                      
 
                       const SizedBox(height: 24),
+
+                      // ... inside your Column layout ...
+
+                    const SizedBox(height: 20),
+
+                      // This will load your custom HTML/Three.js viewer!
+                      const PcbDefect3DViewer(),
+
+                      const SizedBox(height: 20),
 
                       // ── Info Banner ──────────────────────────
                       Container(
