@@ -280,25 +280,32 @@ animate();
     );
   }
 
-  @override
+ @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 480, 
-      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-      clipBehavior: Clip.hardEdge,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0a0f0a),
-        borderRadius: BorderRadius.circular(12.0),
-        border: Border.all(color: Colors.grey.shade300, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return Center( // Centers the viewer on large screens
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: 1100, // Stops it from stretching too wide on PC monitors
+        ),
+        child: Container(
+          height: 650, // Increased from 480 so the whole PCB fits beautifully
+          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+          clipBehavior: Clip.hardEdge,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0a0f0a),
+            borderRadius: BorderRadius.circular(16.0), // Slightly rounder corners
+            border: Border.all(color: Colors.grey.shade300, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-        ],
+          child: HtmlElementView(viewType: viewId),
+        ),
       ),
-      child: HtmlElementView(viewType: viewId),
     );
   }
 }
