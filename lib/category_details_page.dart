@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:http/http.dart' as http; // <-- NEW: Required for making API calls to your server
 
 import 'stats_page.dart';
 import 'services/firebase_service.dart';
@@ -50,7 +51,7 @@ class _CategoryDetailsPageState extends State<CategoryDetailsPage> {
       },
     );
 
-    if (!firstConfirm!) return;
+    if (firstConfirm != true) return;
 
     // Second confirmation (double-check)
     if (!mounted) return;
@@ -75,7 +76,7 @@ class _CategoryDetailsPageState extends State<CategoryDetailsPage> {
       },
     );
 
-    if (!secondConfirm!) return;
+    if (secondConfirm != true) return;
 
     if (!mounted) return;
     setState(() {
@@ -83,13 +84,36 @@ class _CategoryDetailsPageState extends State<CategoryDetailsPage> {
     });
 
     try {
-      await FirebaseService.deletePrediction(_records[index].dbPath);
+      // =====================================================================
+      // NEW CODE: 1. Delete the physical image from the FastAPI Server first
+      // =====================================================================
+      final String filename = record.imageName;
+      final String apiUrl = 'http://127.0.0.1:8000/api/delete_record/$filename';
+      
+      try {
+        final serverResponse = await http.delete(Uri.parse(apiUrl));
+        if (serverResponse.statusCode == 200) {
+          print("Server successfully deleted image: ${serverResponse.body}");
+        } else {
+          print("Server returned an issue (file might already be missing): ${serverResponse.statusCode}");
+        }
+      } catch (networkError) {
+        print("Could not connect to FastAPI server for deletion: $networkError");
+        // We catch this specifically so that if the Python server happens to be turned off,
+        // it doesn't crash the app, and still allows Firebase to clean up the database log.
+      }
+
+      // =====================================================================
+      // EXISTING CODE: 2. Delete the record from Firebase Database
+      // =====================================================================
+      await FirebaseService.deletePrediction(record.dbPath);
+      
       if (mounted) {
         setState(() {
           _records.removeAt(index);
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Record deleted successfully. Go back and refresh to see updates.')),
+          const SnackBar(content: Text('Record and image permanently deleted.')),
         );
       }
     } catch (e) {
