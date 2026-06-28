@@ -13,7 +13,7 @@ class PcbDefect3DViewer extends StatefulWidget {
 class _PcbDefect3DViewerState extends State<PcbDefect3DViewer> {
   final String viewId = 'threejs-pcb-viewer';
 
-  // The HTML string with UPDATED CSS for larger, clearer text and buttons
+  // The HTML string with UPDATED CSS and updated Mouse Bite logic
   final String _rawHtml = r'''
 <!DOCTYPE html>
 <html lang="en">
@@ -65,7 +65,7 @@ canvas { display:block; width:100%; height:100%; cursor:grab; }
 <script>
 const INFO = {
   mh: { name:'Missing Hole',  desc:'A drilled hole absent in the PCB substrate. Prevents component lead insertion and electrical connectivity.', badge:'CRITICAL DEFECT', color:'#ef5350' },
-  mb: { name:'Mouse Bite',    desc:'Semicircular notches bitten into the PCB board edge during depaneling. Named because the edge looks like it was bitten by a mouse. Damages nearby copper traces.', badge:'EDGE DEFECT', color:'#ffa726' },
+  mb: { name:'Mouse Bite',    desc:'Irregular edge degradation or a chunk missing from a copper trace. Reduces trace width, increasing electrical resistance and creating thermal hotspots without fully breaking the circuit.', badge:'TRACE DEFECT', color:'#ffa726' },
   oc: { name:'Open Circuit',  desc:'A break in a copper trace interrupting the electrical path. Current cannot flow, causing partial or full circuit failure.', badge:'ELECTRICAL DEFECT', color:'#42a5f5' }
 };
 const canvas = document.getElementById('cv');
@@ -140,7 +140,7 @@ function buildMH() {
   const g = new THREE.Group(); addFloor(g);
   g.add(box(10, 0.38, 7, MAT.pcb,  0, -0.19, 0)); g.add(box(10, 0.05, 7, MAT.mask, 0,  0.025, 0));
   for (let i = -2; i <= 2; i++) trace(g, 0,     i * 1.0, 8.5, 0.10, 'x');
-  for (let i = -3; i <= 3; i++) trace(g, i*1.1, 0,       5.5, 0.08, 'z');
+  for (let i = -3; i <= 3; i++) trace(g, i*1.1, 0,      5.5, 0.08, 'z');
   g.add(box(2.2, 0.18, 2.2, MAT.chip, 1.8,  0.09, 0.2)); g.add(box(1.8, 0.08, 1.8, MAT.gold, 1.8,  0.22, 0.2));
   for (let i = -3; i <= 3; i++) {
     g.add(box(0.5, 0.06, 0.07, MAT.cu, 0.8 + i * 0.11, 0.03,  1.3));
@@ -158,27 +158,76 @@ function buildMH() {
   });
   return g;
 }
+
+// === UPDATED MOUSE BITE FUNCTION ===
 function buildMB() {
   const g = new THREE.Group(); addFloor(g);
-  const notches = [[-2.6, 0.42], [-1.5, 0.38], [-0.3, 0.44], [0.9, 0.40], [2.1, 0.43], [3.0, 0.36]];
-  const x0 = -5, x1 = 5, z0 = -3.5, z1 = 3.5;
-  const shape = new THREE.Shape(); shape.moveTo(x1, z0); shape.lineTo(x1, z1); shape.lineTo(x0, z1);
-  const sorted = [...notches].sort((a, b) => b[0] - a[0]); let curZ = z1;
-  sorted.forEach(([nz, r]) => { const top = nz + r, bot = nz - r; if (top < curZ) shape.lineTo(x0, top); shape.absarc(x0, nz, r, Math.PI / 2, -Math.PI / 2, true); curZ = bot; });
-  if (curZ > z0) shape.lineTo(x0, z0); shape.lineTo(x1, z0);
-  const board = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.38, bevelEnabled: false }), MAT.pcb); board.rotation.x = -Math.PI / 2; board.position.y = -0.38; board.castShadow = true; board.receiveShadow = true; g.add(board);
-  const maskMesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), MAT.mask); maskMesh.rotation.x = -Math.PI / 2; maskMesh.position.y = 0.022; g.add(maskMesh);
-  for (let i = -2; i <= 2; i++) trace(g, 0,      i * 1.0, 8.0, 0.11, 'x');
-  for (let i = -2; i <= 2; i++) trace(g, i * 1.3, 0,      5.5, 0.09, 'z');
-  g.add(box(2.0, 0.18, 2.0, MAT.chip, 2.5, 0.09, -0.5)); g.add(box(1.6, 0.08, 1.6, MAT.gold, 2.5, 0.22, -0.5));
-  smtComp(g,  1.0,  2.2, 0.26, 0.48); smtComp(g,  3.0, -1.2, 0.26, 0.48); smtComp(g, -0.5, -2.2, 0.18, 0.32); smtComp(g,  2.5,  0.8, 0.18, 0.32);
-  [[2, -2.2], [3.5, 2.2], [-1, 2.6], [4, -1.5]].forEach(([x, z]) => padHole(g, x, z));
-  sorted.forEach(([nz, r]) => {
-    const arc = new THREE.Mesh(new THREE.TorusGeometry(r + 0.06, 0.08, 8, 20, Math.PI), MAT.amb); arc.rotation.y = Math.PI / 2; arc.position.set(x0 + 0.02, 0.06, nz); arc.userData.pulse = true; g.add(arc);
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 10), new THREE.MeshStandardMaterial({ color:0xffd54f, emissive:0xff8f00, emissiveIntensity:2.5 })); dot.position.set(x0 + r + 0.1, 0.2, nz); dot.userData.pulse = true; g.add(dot);
-  });
+  
+  // Standard PCB Substrate and Mask (no edge notches)
+  g.add(box(10, 0.38, 7, MAT.pcb,  0, -0.19, 0)); 
+  g.add(box(10, 0.05, 7, MAT.mask, 0,  0.025, 0));
+  
+  // Decorative Background Traces
+  for (let i = -2; i <= 2; i++) {
+    if (i !== 0) trace(g, 0, i * 1.5, 8.5, 0.10, 'x');
+  }
+  for (let i = -3; i <= 3; i++) {
+    if (i !== 0) trace(g, i * 1.2, 0, 5.5, 0.08, 'z');
+  }
+  
+  // --- The Defective Mouse Bite Trace ---
+  // We draw a vertical trace and cut a jagged bite out of its left side
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.18, -3.5);
+  shape.lineTo(0.18, -3.5);
+  shape.lineTo(0.18, 3.5);
+  
+  // Moving down the left side and creating the bite at the center (z=0)
+  shape.lineTo(-0.18, 3.5);
+  shape.lineTo(-0.18, 0.5);
+  
+  // The irregular "Bite" coordinates
+  shape.lineTo(0.08, 0.25);
+  shape.lineTo(0.14, 0.0); // Deepest part of the bite, almost breaking the trace
+  shape.lineTo(0.05, -0.2);
+  shape.lineTo(-0.18, -0.45);
+  
+  // Finishing the left side
+  shape.lineTo(-0.18, -3.5);
+  
+  const traceExtrude = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: false });
+  const defTrace = new THREE.Mesh(traceExtrude, MAT.cu);
+  defTrace.rotation.x = -Math.PI / 2;
+  defTrace.position.y = 0.028; // Sit just above the mask
+  defTrace.castShadow = true;
+  g.add(defTrace);
+  
+  // Add Pads at the end of the defective trace
+  padHole(g, 0, 3.8); 
+  padHole(g, 0, -3.8);
+
+  // Add decorative components
+  g.add(box(2.0, 0.18, 2.0, MAT.chip, 2.5, 0.09, -1.0)); 
+  g.add(box(1.6, 0.08, 1.6, MAT.gold, 2.5, 0.22, -1.0));
+  smtComp(g,  1.0,  2.2, 0.26, 0.48); 
+  smtComp(g, -2.5,  1.8, 0.18, 0.32); 
+
+  // --- Defect Highlight Visuals ---
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.05, 16, 32), MAT.amb); 
+  ring.rotation.x = Math.PI / 2; 
+  ring.position.set(0, 0.11, 0); 
+  ring.userData.pulse = true; 
+  g.add(ring);
+  
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), new THREE.MeshStandardMaterial({ color:0xff8f00, emissive:0xff8f00, emissiveIntensity:2, transparent:true, opacity:0.8 })); 
+  glow.position.set(-0.02, 0.15, 0); 
+  glow.userData.pulse = true; 
+  g.add(glow);
+
   return g;
 }
+// === END UPDATED MOUSE BITE FUNCTION ===
+
 function buildOC() {
   const g = new THREE.Group(); addFloor(g);
   g.add(box(10, 0.38, 7, MAT.pcb,  0, -0.19, 0)); g.add(box(10, 0.05, 7, MAT.mask, 0,  0.025, 0));
